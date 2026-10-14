@@ -1,0 +1,22 @@
+
+# Environment variables and secrets
+.env
+.env.*
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Persistent database and model artifacts
+postgres/data/
+mlflow/data/
+
+# Logs
+*.log
+
+# Editors
+.vscode/
+.idea/

@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: house-price-postgres
+    environment:
+      POSTGRES_DB: mlflow
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  mlflow:
+    build:
+      context: ./mlflow
+    container_name: house-price-mlflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5000:5000"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - ./mlflow/data:/mlflow/data
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql://mlflow:${POSTGRES_PASSWORD}@postgres:5432/mlflow
+      --serve-artifacts
+      --artifacts-destination /mlflow/data/artifacts
+      --allowed-hosts "*"
+    restart: unless-stopped
+
+  model-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: house-price-api
+    depends_on:
+      - mlflow
+    ports:
+      - "8000:8000"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_REGISTERED_MODEL: house-price-predictor
+      MODEL_CHAMPION_ALIAS: champion
+    restart: unless-stopped
+
+volumes:
+
+  postgres_data:
