@@ -8,3 +8,6 @@ python-dotenv
 fastapi
 uvicorn
 pydantic
+dvc
+pyyaml
+sqlalchemy

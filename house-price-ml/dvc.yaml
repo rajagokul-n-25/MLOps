@@ -1,0 +1,21 @@
+stages:
+  ingest:
+    cmd: python src/ingest.py
+    deps:
+      - src/ingest.py
+    params:
+      - ingest.table_name
+    outs:
+      - data/house-prices.csv
+
+  train:
+    cmd: python src/train.py
+    deps:
+      - src/train.py
+      - data/house-prices.csv
+    params:
+      - train.test_size
+      - train.random_state
+      - train.r2_threshold
+      - train.mae_threshold
+

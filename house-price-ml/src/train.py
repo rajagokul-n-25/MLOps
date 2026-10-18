@@ -1,6 +1,6 @@
+import os
 import matplotlib.pyplot as plt
 import mlflow
-import mlflow.data
 import mlflow.sklearn
 import pandas as pd
 from mlflow.models import infer_signature
@@ -12,110 +12,40 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-# Import configuration settings
-try:
-    from src.config import (
-        DATASET_URL,
-        MAE_THRESHOLD,
-        MLFLOW_EXPERIMENT,
-        MLFLOW_REGISTERED_MODEL,
-        MLFLOW_TRACKING_URI,
-        MODEL_CHALLENGER_ALIAS,
-        MODEL_CHAMPION_ALIAS,
-        R2_THRESHOLD,
-        RANDOM_STATE,
-        TARGET_COLUMN,
-        TEST_SIZE,
-    )
-except ModuleNotFoundError:
-    from config import (
-        DATASET_URL,
-        MAE_THRESHOLD,
-        MLFLOW_EXPERIMENT,
-        MLFLOW_REGISTERED_MODEL,
-        MLFLOW_TRACKING_URI,
-        MODEL_CHALLENGER_ALIAS,
-        MODEL_CHAMPION_ALIAS,
-        R2_THRESHOLD,
-        RANDOM_STATE,
-        TARGET_COLUMN,
-        TEST_SIZE,
-    )
+from src.config import (
+    DATA_PATH,
+    EXPERIMENT_NAME,
+    MAE_THRESHOLD,
+    MLFLOW_URI,
+    MODEL_NAME,
+    R2_THRESHOLD,
+    RANDOM_STATE,
+    TEST_SIZE,
+)
 
 
-def log_evaluation_plots(model, y_test, predictions):
-    """Create and save helpful visual charts to MLflow."""
-    # 1. Residuals plot (Difference between actual and predicted price)
-    residuals = y_test - predictions
-    fig, ax = plt.subplots(figsize=(7, 4))
-    ax.scatter(predictions, residuals, alpha=0.6, color="steelblue")
-    ax.axhline(0, color="red", linestyle="--")
-    ax.set_title("Residuals vs Predicted Price")
-    ax.set_xlabel("Predicted Price ($)")
-    ax.set_ylabel("Error / Residual ($)")
-    plt.tight_layout()
-    mlflow.log_figure(fig, "plots/residuals.png")
-    plt.close(fig)
+def train():
+    # 1. Check if dataset exists
+    if not os.path.exists(DATA_PATH):
+        print(f"Error: Dataset not found at {DATA_PATH}. Run 'python src/ingest.py' first.")
+        return
 
-    # 2. Feature coefficients plot (Impact of each feature)
-    feature_names = model.named_steps["preprocessor"].get_feature_names_out()
-    coefficients = model.named_steps["regressor"].coef_
-    coef_series = pd.Series(coefficients, index=feature_names).sort_values()
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    coef_series.plot(kind="barh", ax=ax, color="forestgreen")
-    ax.axvline(0, color="black", linestyle="--")
-    ax.set_title("Feature Coefficients (Price Impact)")
-    plt.tight_layout()
-    mlflow.log_figure(fig, "plots/feature_coefficients.png")
-    plt.close(fig)
-
-
-def check_quality_gate_and_promote(model_info, r2, mae):
-    """Check if model meets accuracy thresholds to become the new Champion."""
+    # 2. Connect to MLflow
+    mlflow.set_tracking_uri(MLFLOW_URI)
+    mlflow.set_experiment(EXPERIMENT_NAME)
     client = MlflowClient()
-    version = model_info.registered_model_version
 
-    # Model must have high R2 and low MAE to pass
-    passed = (r2 >= R2_THRESHOLD) and (mae <= MAE_THRESHOLD)
+    # 3. Load dataset
+    df = pd.read_csv(DATA_PATH)
+    print(f"Loaded {len(df)} rows from {DATA_PATH}")
 
-    if passed:
-        alias = MODEL_CHAMPION_ALIAS
-        print(f" Quality Gate PASSED! (R2={r2:.3f}, MAE={mae:.0f})")
-        print(f"   Model v{version} is now promoted to @{alias}")
-    else:
-        alias = MODEL_CHALLENGER_ALIAS
-        print(f" Quality Gate FAILED (R2={r2:.3f}, MAE={mae:.0f})")
-        print(f"   Model v{version} marked as @{alias} (will not be in production)")
+    X = df.drop(columns=["Price"])
+    y = df["Price"]
 
-    # Assign alias in MLflow registry
-    client.set_registered_model_alias(
-        name=MLFLOW_REGISTERED_MODEL,
-        alias=alias,
-        version=version,
-    )
-    return alias
+    # 4. Preprocessing: scale numbers, encode categories
+    numeric_cols = ["SqFt", "Bedrooms", "Bathrooms", "Offers"]
+    categorical_cols = ["Brick", "Neighborhood"]
 
-
-def main():
-    print("Starting model training pipeline...")
-
-    # Connect to MLflow tracking server
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    mlflow.set_experiment(MLFLOW_EXPERIMENT)
-
-    # 1. Load data
-    df = pd.read_csv(DATASET_URL)
-    print(f"Loaded dataset: {len(df)} rows")
-
-    X = df.drop(columns=[TARGET_COLUMN])
-    y = df[TARGET_COLUMN]
-
-    # Separate numeric and categorical columns
-    numeric_cols = X.select_dtypes(include=["number"]).columns.tolist()
-    categorical_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
-
-    # 2. Build preprocessing and model pipeline
     preprocessor = ColumnTransformer(
         transformers=[
             ("num", StandardScaler(), numeric_cols),
@@ -123,6 +53,7 @@ def main():
         ]
     )
 
+    # 5. Build model pipeline
     model = Pipeline(
         steps=[
             ("preprocessor", preprocessor),
@@ -130,30 +61,13 @@ def main():
         ]
     )
 
-    # Train / Test split
+    # 6. Split data using parameters from params.yaml
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE
     )
 
-    # 3. Train and track run in MLflow
+    # 7. Train model & log with MLflow
     with mlflow.start_run(run_name="Linear Regression") as run:
-
-        # Track dataset lineage
-        dataset = mlflow.data.from_pandas(
-            df, targets=TARGET_COLUMN, name="house_prices", source=DATASET_URL
-        )
-        mlflow.log_input(dataset, context="training")
-
-        # Set tags for tracking
-        mlflow.set_tags(
-            {
-                "model_type": "Linear Regression",
-                "framework": "scikit-learn",
-                "stage": "training",
-            }
-        )
-
-        # Train model
         model.fit(X_train, y_train)
         predictions = model.predict(X_test)
 
@@ -163,44 +77,45 @@ def main():
         r2 = r2_score(y_test, predictions)
 
         # Log parameters and metrics
-        mlflow.log_params(
-            {
-                "test_size": TEST_SIZE,
-                "random_state": RANDOM_STATE,
-                "dataset_rows": len(df),
-            }
-        )
-        mlflow.log_metrics(
-            {
-                "MAE": float(mae),
-                "RMSE": float(rmse),
-                "R2": float(r2),
-            }
-        )
+        mlflow.log_params({"test_size": TEST_SIZE, "random_state": RANDOM_STATE})
+        mlflow.log_metrics({"MAE": float(mae), "RMSE": float(rmse), "R2": float(r2)})
 
-        # Log visual diagnostic plots
-        log_evaluation_plots(model, y_test, predictions)
+        # Save residual error plot
+        fig, ax = plt.subplots(figsize=(6, 4))
+        ax.scatter(predictions, y_test - predictions, alpha=0.6, color="steelblue")
+        ax.axhline(0, color="red", linestyle="--")
+        ax.set_title("Prediction Errors")
+        plt.tight_layout()
+        mlflow.log_figure(fig, "plots/residuals.png")
+        plt.close(fig)
 
-        # Log model artifact and register it
+        # Register model in MLflow Registry
         signature = infer_signature(X_train, model.predict(X_train))
         model_info = mlflow.sklearn.log_model(
             sk_model=model,
             name="house_price_model",
             signature=signature,
             input_example=X_train.head(3),
-            registered_model_name=MLFLOW_REGISTERED_MODEL,
+            registered_model_name=MODEL_NAME,
         )
 
-        # Check quality gate and assign alias (@champion or @challenger)
-        assigned_alias = check_quality_gate_and_promote(model_info, r2, mae)
+        # Quality Gate: Check if good enough to be @champion
+        version = model_info.registered_model_version
+        if r2 >= R2_THRESHOLD and mae <= MAE_THRESHOLD:
+            alias = "champion"
+            print(f" Quality Gate PASSED! Model promoted to @{alias}")
+        else:
+            alias = "challenger"
+            print(f" Quality Gate FAILED. Model tagged as @{alias}")
 
-        print("\nTraining completed successfully!")
-        print(f"MAE:            ${mae:,.2f}")
-        print(f"R2 Score:       {r2:.4f}")
-        print(f"Run ID:         {run.info.run_id}")
-        print(f"Model Version:  v{model_info.registered_model_version}")
-        print(f"Status:         @{assigned_alias}")
+        client.set_registered_model_alias(name=MODEL_NAME, alias=alias, version=version)
+
+        print(f"\nTraining Complete!")
+        print(f"Accuracy (R2):  {r2:.4f}")
+        print(f"Avg Error (MAE): ${mae:,.2f}")
+        print(f"Model Version:  v{version} (@{alias})")
+        print(f"Tracked in MLflow: {MLFLOW_URI}")
 
 
 if __name__ == "__main__":
-    main()
+    train()
