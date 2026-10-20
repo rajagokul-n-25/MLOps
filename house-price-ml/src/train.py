@@ -1,6 +1,7 @@
 import os
 import matplotlib.pyplot as plt
 import mlflow
+import mlflow.data
 import mlflow.sklearn
 import pandas as pd
 from mlflow.models import infer_signature
@@ -68,6 +69,15 @@ def train():
 
     # 7. Train model & log with MLflow
     with mlflow.start_run(run_name="Linear Regression") as run:
+        # Log input dataset to MLflow
+        dataset = mlflow.data.from_pandas(
+            df,
+            source="data/house-prices.csv",
+            targets="Price",
+            name="house_prices",
+        )
+        mlflow.log_input(dataset, context="training")
+
         model.fit(X_train, y_train)
         predictions = model.predict(X_test)
 

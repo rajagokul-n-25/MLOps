@@ -1,6 +1,6 @@
 stages:
   ingest:
-    cmd: python src/ingest.py
+    cmd: python -m src.ingest
     deps:
       - src/ingest.py
     params:
@@ -9,7 +9,7 @@ stages:
       - data/house-prices.csv
 
   train:
-    cmd: python src/train.py
+    cmd: python -m src.train
     deps:
       - src/train.py
       - data/house-prices.csv

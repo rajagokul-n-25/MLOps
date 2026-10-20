@@ -1,0 +1,38 @@
+schema: '2.0'
+stages:
+  ingest:
+    cmd: python -m src.ingest
+    deps:
+    - path: src/ingest.py
+      hash: md5
+      md5: d4f6a9a3d7b95cdaf7ee7be1f3934afb
+      size: 736
+      isexec: true
+    params:
+      params.yaml:
+        ingest.table_name: house_prices
+    outs:
+    - path: data/house-prices.csv
+      hash: md5
+      md5: 34e748ee450c34e74d9894622ae1d762
+      size: 3867
+      isexec: true
+  train:
+    cmd: python -m src.train
+    deps:
+    - path: data/house-prices.csv
+      hash: md5
+      md5: 34e748ee450c34e74d9894622ae1d762
+      size: 3867
+      isexec: true
+    - path: src/train.py
+      hash: md5
+      md5: 445f1d164639250c744116abb8f91a07
+      size: 4254
+      isexec: true
+    params:
+      params.yaml:
+        train.mae_threshold: 20000.0
+        train.r2_threshold: 0.7
+        train.random_state: 42
+        train.test_size: 0.2
