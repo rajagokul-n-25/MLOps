@@ -1,5 +1,8 @@
+import warnings
 import pandas as pd
 import psycopg2
+
+warnings.filterwarnings("ignore", category=UserWarning, module="pandas")
 from src.config import (
     DATA_PATH,
     DB_HOST,

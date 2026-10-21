@@ -14,16 +14,16 @@ stages:
     outs:
     - path: data/house-prices.csv
       hash: md5
-      md5: 6b0e512d0fd0ab3c878a1d8aa2a3975d
-      size: 4022
+      md5: 7b40434dcbff9474b9b4873d8f1dd551
+      size: 4177
       isexec: true
   train:
     cmd: python -m src.train
     deps:
     - path: data/house-prices.csv
       hash: md5
-      md5: 6b0e512d0fd0ab3c878a1d8aa2a3975d
-      size: 4022
+      md5: 7b40434dcbff9474b9b4873d8f1dd551
+      size: 4177
       isexec: true
     - path: src/train.py
       hash: md5

@@ -43,6 +43,10 @@ def train():
     X = df.drop(columns=["Price"])
     y = df["Price"]
 
+    # Convert integer columns to float64 to avoid MLflow schema enforcement warnings with missing values
+    int_cols = X.select_dtypes(include=["int64", "int32"]).columns
+    X[int_cols] = X[int_cols].astype("float64")
+
     # 4. Preprocessing: scale numbers, encode categories
     numeric_cols = ["SqFt", "Bedrooms", "Bathrooms", "Offers"]
     categorical_cols = ["Brick", "Neighborhood"]
@@ -70,9 +74,10 @@ def train():
     # 7. Train model & log with MLflow
     with mlflow.start_run(run_name="Linear Regression") as run:
         # Log input dataset to MLflow
+        abs_data_path = os.path.abspath(DATA_PATH)
         dataset = mlflow.data.from_pandas(
             df,
-            source="data/house-prices.csv",
+            source=f"file://{abs_data_path}",
             targets="Price",
             name="house_prices",
         )
