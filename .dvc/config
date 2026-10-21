@@ -3,5 +3,3 @@
 ['remote "local-storage"']
     url = s3://ml-project/dvcstore
     endpointurl = http://localhost:9000
-    access_key_id = admin
-    secret_access_key = admin@123
